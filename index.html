@@ -158,7 +158,18 @@ html[data-cursor=cross] #cr{width:18px;height:18px;margin:-9px 0 0 -9px;border:0
 </section>
 </main>
 <footer class="w foot"><b>ЛГБТ SQUAD</b><div><span>Digital Archive</span><span id="yr2"></span></div></footer>
-<div class="modal" id="photoModal" role="dialog" aria-modal="true" aria-label="Просмотр"><div class="mgrid"><div class="mimg"><img id="modalImage" alt=""></div><div class="mside"><div class="mtop"><span id="modalStep"></span><div><button class="link arr" onclick="stepPhoto(-1)" aria-label="Назад">←</button><button class="link arr" onclick="stepPhoto(1)" aria-label="Вперёд">→</button><button class="link" id="modalClose" onclick="closeModal()">Закрыть ✕</button></div></div><div id="modalMeta"></div><h2 id="modalTitle"></h2><p id="modalDescription"></p><div id="modalTags" class="tagline"></div><div class="comments"><h3>Комментарии</h3><div id="giscusMount"></div></div></div></div></div>
+<div class="modal" id="photoModal" role="dialog" aria-modal="true" aria-label="Просмотр"><div class="mgrid"><div class="mimg"><img id="modalImage" alt=""></div><div class="mside"><div class="mtop"><span id="modalStep"></span><div><button class="link arr" onclick="stepPhoto(-1)" aria-label="Назад">←</button><button class="link arr" onclick="stepPhoto(1)" aria-label="Вперёд">→</button><button class="link" id="modalClose" onclick="closeModal()">Закрыть ✕</button></div></div><div id="modalMeta"></div><h2 id="modalTitle"></h2><p id="modalDescription"></p><div id="modalTags" class="tagline"></div><div class="comments" id="commentsBlock">
+<h3>Комментарии</h3>
+<div id="profileBox" style="display:flex;gap:12px;align-items:center;margin-bottom:16px;flex-wrap:wrap">
+  <div id="profAv" style="width:40px;height:40px;border-radius:50%;background:var(--panel);border:1px solid var(--line);display:grid;place-items:center;overflow:hidden;font-size:20px;flex-shrink:0">◈</div>
+  <input id="profNick" placeholder="Твой ник" style="background:none;border:0;border-bottom:1px solid var(--line);padding:6px 0;color:var(--text);width:120px;font:inherit">
+  <label style="font-size:12px;color:var(--muted);cursor:pointer">Аватар <input type="file" id="profFile" accept="image/*" style="display:none"></label>
+  <button class="link" id="profSave" style="font-size:13px">Сохранить профиль</button>
+</div>
+<textarea id="cmtText" placeholder="Написать комментарий…" rows="2" style="width:100%;background:none;border:1px solid var(--line);border-radius:8px;padding:10px 12px;color:var(--text);font:inherit;resize:vertical;margin-bottom:10px"></textarea>
+<button class="link" id="cmtSend">Отправить</button>
+<div id="cmtList" style="margin-top:20px"></div>
+</div></div></div></div>
 <script>
 // ==================== АВАТАРКА ====================
 // Картинка встроена прямо в файл. Чтобы сменить: замени значение на путь к файлу, например "avatar.png".
@@ -171,14 +182,12 @@ let EVENTS = [];
 let MEMBERS = [];
 // /*DATA-END*/
 
-// ==================== КОММЕНТАРИИ GISCUS ====================
-// Чтобы включить: https://giscus.app → выбери репозиторий → вставь 4 значения ниже.
-const GISCUS_CONFIG = {
-  repo: "mohovd031-png/LGBT_squad",
-  repoId: "R_kgDOVszJvw",
-  category: "General",
-  categoryId: "DIC_kwDOVszJv84DLBrQ"
-};
+// ==================== КОММЕНТАРИИ (Supabase) ====================
+// 1. Создай проект на https://supabase.com
+// 2. SQL Editor → выполни SQL из README
+// 3. Settings → API → скопируй URL и anon key сюда:
+const SUPABASE_URL = "https://YOUR_PROJECT.supabase.co";
+const SUPABASE_ANON_KEY = "YOUR_ANON_KEY";
 
 
 // ==================== КОД САЙТА ====================
@@ -412,28 +421,84 @@ function fillModal(p){
  $("modalTitle").textContent = p.title;$("modalDescription").textContent = p.description;
  $("modalMeta").textContent = `№ ${p.id} · ${fmt(p.date)}${p.category?" · "+p.category:""}`;
  $("modalTags").textContent = (p.tags||[]).map(t => "#"+t).join("  ");$("modalStep").textContent = `${mIdx+1} / ${mList.length}`;
- $("giscusMount").innerHTML = "";document.querySelector(".comments").hidden = false;loadComments(p);
+ $("commentsBlock").hidden = false; loadComments(p);
 }
 function showModal(){lastFocus = document.activeElement;$("photoModal").classList.add("open");document.body.style.overflow = "hidden";$("modalClose").focus();}
 function openPhoto(id){mList = sorted();mIdx = mList.findIndex(x => String(x.id)===String(id));if(mIdx<0)return;$("photoModal").classList.remove("single");fillModal(mList[mIdx]);showModal();}
 function stepPhoto(d){if(mList.length<2)return;mIdx = (mIdx+d+mList.length)%mList.length;fillModal(mList[mIdx]);$("photoModal").scrollTop = 0;}
 function openAvatar(){
  $("photoModal").classList.add("single");$("modalImage").src = SITE_AVATAR;$("modalImage").style.display = "block";
- $("modalTitle").textContent = "ЛГБТ SQUAD";$("modalDescription").textContent = "Аватар архива";$("modalMeta").textContent = "Fig. 01";$("modalTags").textContent = "";$("giscusMount").innerHTML = "";showModal();
+ $("modalTitle").textContent = "ЛГБТ SQUAD";$("modalDescription").textContent = "Аватар архива";$("modalMeta").textContent = "Fig. 01";$("modalTags").textContent = "";
+ $("commentsBlock").hidden = true; showModal();
 }
-function closeModal(){$("photoModal").classList.remove("open","single");document.body.style.overflow = "";$("giscusMount").innerHTML = "";if(lastFocus&&lastFocus.focus)lastFocus.focus();}
-function loadComments(p){
- const c=GISCUS_CONFIG, mount=$("giscusMount");
- if(!c.repo||c.repo.startsWith("OWNER/")||!c.repoId||c.repoId.startsWith("YOUR_")||!c.categoryId||c.categoryId.startsWith("YOUR_")){
-  mount.closest(".comments").hidden=true;return;
- }
- mount.closest(".comments").hidden=false;
- mount.innerHTML="";
- const s=document.createElement("script");s.src="https://giscus.app/client.js";
- s.setAttribute("data-repo",c.repo);s.setAttribute("data-repo-id",c.repoId);s.setAttribute("data-category",c.category);s.setAttribute("data-category-id",c.categoryId);
- s.setAttribute("data-mapping","specific");s.setAttribute("data-term","ЛГБТ SQUAD — скрин #"+p.id);
- s.setAttribute("data-strict","0");s.setAttribute("data-reactions-enabled","1");s.setAttribute("data-emit-metadata","0");s.setAttribute("data-input-position","top");s.setAttribute("data-theme",S.theme==="paper"?"light":"dark");s.setAttribute("data-lang","ru");s.setAttribute("crossorigin","anonymous");s.async=true;mount.appendChild(s);
+function closeModal(){$("photoModal").classList.remove("open","single");document.body.style.overflow = "";$("cmtList").innerHTML="";if(lastFocus&&lastFocus.focus)lastFocus.focus();}
+
+// ---- профиль + комментарии (Supabase) ----
+let currentPhotoId = null;
+const DEF_PROF = {nick:"Аноним", avatar:""};
+function getProf(){try{return Object.assign({},DEF_PROF,JSON.parse(localStorage.getItem("sq-prof")||"{}"));}catch(e){return {...DEF_PROF};}}
+function saveProf(p){try{localStorage.setItem("sq-prof",JSON.stringify(p));}catch(e){}}
+function applyProf(){
+  const p=getProf(); $("profNick").value=p.nick||"";
+  const av=$("profAv");
+  if(p.avatar){av.innerHTML=`<img src="${p.avatar}" style="width:100%;height:100%;object-fit:cover">`;}
+  else av.textContent="◈";
 }
+$("profFile").addEventListener("change",e=>{
+  const f=e.target.files[0]; if(!f)return;
+  if(f.size>400000){alert("Аватар слишком большой (макс ~400кб)");return;}
+  const r=new FileReader(); r.onload=()=>{const p=getProf();p.avatar=r.result;saveProf(p);applyProf();}; r.readAsDataURL(f);
+});
+$("profSave").addEventListener("click",()=>{
+  const p=getProf(); p.nick=($("profNick").value.trim()||"Аноним").slice(0,24); saveProf(p); applyProf();
+});
+applyProf();
+
+function sbHeaders(){return {"apikey":SUPABASE_ANON_KEY,"Authorization":"Bearer "+SUPABASE_ANON_KEY,"Content-Type":"application/json","Prefer":"return=representation"};}
+function sbReady(){return SUPABASE_URL && !SUPABASE_URL.includes("YOUR_") && SUPABASE_ANON_KEY && !SUPABASE_ANON_KEY.includes("YOUR_");}
+
+async function loadComments(p){
+  currentPhotoId = p.id;
+  const list=$("cmtList"); list.innerHTML = '<p style="color:var(--muted);font-size:14px">Загрузка…</p>';
+  if(!sbReady()){
+    list.innerHTML = '<p style="color:var(--muted);font-size:14px">Комментарии не настроены. Заполни SUPABASE_URL и SUPABASE_ANON_KEY в index.html (см. README).</p>';
+    return;
+  }
+  try{
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/comments?photo_id=eq.${encodeURIComponent(p.id)}&order=created_at.asc`, {headers:sbHeaders()});
+    const rows = await res.json();
+    if(!Array.isArray(rows)){list.innerHTML='<p style="color:var(--muted)">Ошибка загрузки</p>';return;}
+    if(!rows.length){list.innerHTML='<p style="color:var(--muted);font-size:14px">Пока нет комментариев — будь первым</p>';return;}
+    list.innerHTML = rows.map(c=>`
+      <div style="display:flex;gap:12px;padding:14px 0;border-top:1px solid var(--line)">
+        <div style="width:36px;height:36px;border-radius:50%;overflow:hidden;background:var(--panel);border:1px solid var(--line);flex-shrink:0;display:grid;place-items:center;font-size:16px">
+          ${c.avatar?`<img src="${esc(c.avatar)}" style="width:100%;height:100%;object-fit:cover">`:"◈"}
+        </div>
+        <div style="min-width:0">
+          <b style="font-weight:500">${esc(c.nick||"Аноним")}</b>
+          <span style="color:var(--muted);font-size:12px;margin-left:8px">${c.created_at?new Date(c.created_at).toLocaleString("ru-RU"):""}</span>
+          <p style="margin:4px 0 0;white-space:pre-wrap">${esc(c.text)}</p>
+        </div>
+      </div>`).join("");
+  }catch(e){list.innerHTML='<p style="color:var(--muted)">Не удалось загрузить комментарии</p>';}
+}
+
+$("cmtSend").addEventListener("click", async ()=>{
+  const text=($("cmtText").value||"").trim();
+  if(!text){alert("Напиши что-нибудь");return;}
+  if(!currentPhotoId)return;
+  if(!sbReady()){alert("Сначала настрой Supabase (см. README)");return;}
+  const p=getProf();
+  const body={photo_id:String(currentPhotoId), nick:(p.nick||"Аноним").slice(0,24), avatar:(p.avatar||"").slice(0,200000), text:text.slice(0,1000)};
+  $("cmtSend").disabled=true;
+  try{
+    const res=await fetch(`${SUPABASE_URL}/rest/v1/comments`,{method:"POST",headers:sbHeaders(),body:JSON.stringify(body)});
+    if(!res.ok){const t=await res.text();alert("Ошибка: "+t);return;}
+    $("cmtText").value="";
+    loadComments({id:currentPhotoId});
+  }catch(e){alert("Не удалось отправить");}
+  finally{$("cmtSend").disabled=false;}
+});
 
 
 document.addEventListener("click",e => {const c = e.target.closest(".photo");if(c)openPhoto(c.dataset.id);});
