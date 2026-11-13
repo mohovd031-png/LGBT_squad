@@ -371,7 +371,7 @@ document.addEventListener("pointerdown",e => {if(dr.classList.contains("open")&&
 setInterval(() => {if(Mu.on&&dr.classList.contains("open")){const v = Mu.bars();dr.querySelectorAll(".eq b").forEach((b,i) => b.style.transform = `scaleY(${Math.max(.1,v[i])})`);}},70);
 
 // ---- рендер ----
-const card = p => `<article class="photo rv" tabindex="0" role="button" aria-label="${esc(p.title)}" data-id="${esc(p.id)}" onclick="openPhoto(this.dataset.id)"><div class="ph">${p.image?`<img src="${esc(p.image)}" alt="${esc(p.title)}" loading="lazy" decoding="async" onerror="this.remove()">`:""}</div><div class="cap"><small>№ ${esc(p.id)}</small><h3>${esc(p.title)}</h3></div><p>${esc(p.description)}</p><div class="tagline">${esc(fmt(p.date))}${p.category?" · "+esc(p.category):""}</div></article>`;
+const card = p => `<article class="photo rv" tabindex="0" role="button" aria-label="${esc(p.title)}" data-id="${esc(p.id)}"><div class="ph">${p.image?`<img src="${esc(p.image)}" alt="${esc(p.title)}" loading="lazy" decoding="async" onerror="this.remove()">`:""}</div><div class="cap"><small>№ ${esc(p.id)}</small><h3>${esc(p.title)}</h3></div><p>${esc(p.description)}</p><div class="tagline">${esc(fmt(p.date))}${p.category?" · "+esc(p.category):""}</div></article>`;
 const empty = m => `<p class="empty">${m}</p>`;
 function filter(q,cat=""){q = q.toLowerCase().trim();return sorted().filter(p => (!cat||p.category===cat)&&(!q||[p.title,p.description,p.category,...(p.tags||[])].join(" ").toLowerCase().includes(q)));}
 function lists(){
@@ -432,13 +432,18 @@ function startCommentsPolling(){
   stopCommentsPolling();
   commentsPollTimer=setInterval(()=>{
     if($("photoModal").classList.contains("open")&&!$("photoModal").classList.contains("single")&&currentPhotoId!==null)
-      loadComments({id:currentPhotoId});
+      loadComments({id:currentPhotoId},true);
     else stopCommentsPolling();
   },12000);
 }
 function stopCommentsPolling(){if(commentsPollTimer){clearInterval(commentsPollTimer);commentsPollTimer=null;}}
 function showModal(){lastFocus = document.activeElement;$("photoModal").classList.add("open");document.body.style.overflow = "hidden";$("modalClose").focus();if(!$("photoModal").classList.contains("single"))startCommentsPolling();}
 function openPhoto(id){mList = sorted();mIdx = mList.findIndex(x => String(x.id)===String(id));if(mIdx<0)return;$("photoModal").classList.remove("single");fillModal(mList[mIdx]);showModal();}
+document.addEventListener("click",e=>{
+  const card=e.target.closest&&e.target.closest(".photo[data-id]");
+  if(card){e.preventDefault();openPhoto(card.dataset.id);}
+});
+
 function stepPhoto(d){if(mList.length<2)return;mIdx = (mIdx+d+mList.length)%mList.length;fillModal(mList[mIdx]);$("photoModal").scrollTop = 0;}
 function openAvatar(){
  $("photoModal").classList.add("single");$("modalImage").src = SITE_AVATAR;$("modalImage").style.display = "block";
@@ -494,9 +499,9 @@ async function refreshArchive(){
 }
 
 
-async function loadComments(p){
+async function loadComments(p, quiet=false){
   currentPhotoId = p.id;
-  const list=$("cmtList"); list.innerHTML = '<p style="color:var(--muted);font-size:14px">Загрузка…</p>';
+  const list=$("cmtList"); if(!quiet) list.innerHTML = '<p style="color:var(--muted);font-size:14px">Загрузка…</p>';
   if(!sbReady()){
     list.innerHTML = '<p style="color:var(--muted);font-size:14px">Комментарии не настроены. Заполни SUPABASE_URL и SUPABASE_ANON_KEY в index.html (см. README).</p>';
     return;
@@ -504,6 +509,7 @@ async function loadComments(p){
   try{
     const res = await fetch(`${SUPABASE_URL}/rest/v1/comments?photo_id=eq.${encodeURIComponent(p.id)}&order=created_at.asc`, {headers:sbHeaders()});
     const rows = await res.json();
+    if(String(currentPhotoId)!==String(p.id))return;
     if(!Array.isArray(rows)){list.innerHTML='<p style="color:var(--muted)">Ошибка загрузки</p>';return;}
     if(!rows.length){list.innerHTML='<p style="color:var(--muted);font-size:14px">Пока нет комментариев — будь первым</p>';return;}
     list.innerHTML = rows.map(c=>`
@@ -597,6 +603,7 @@ window.editPhoto=i=>{
   $("pId").value=p.id;$("pTitle").value=p.title||"";$("pDesc").value=p.description||"";
   $("pDate").value=p.date||"";$("pCat").value=p.category||"";$("pTags").value=(p.tags||[]).join(", ");
   $("pImage").value=p.image&&!p.image.startsWith("data:")?p.image:"";$("pFile").value="";
+  $("pImage").dataset.original=p.image||"";delete $("pImage").dataset.b64;
   $("pSave").dataset.edit=p.id;$("pSave").textContent="Обновить фото";
   scrollTo({top:$("pId").offsetTop-100,behavior:"smooth"});
 };
@@ -607,15 +614,35 @@ window.delEvent=async i=>{const e=EVENTS[i];if(!e||!confirm("Удалить со
 window.delMember=async i=>{const m=MEMBERS[i];if(!m||!confirm("Удалить участника?"))return;try{await sbRequest("members",`id=eq.${encodeURIComponent(m.id)}`,{method:"DELETE"});await refreshArchive();}catch(x){alert("Ошибка удаления участника: "+x.message);}};
 $("pClear").addEventListener("click",()=>{
   ["pId","pTitle","pDesc","pDate","pCat","pTags","pImage"].forEach(id=>$(id).value="");
-  $("pFile").value="";delete $("pImage").dataset.b64;delete $("pSave").dataset.edit;$("pSave").textContent="Сохранить фото";
+  $("pFile").value="";delete $("pImage").dataset.b64;delete $("pImage").dataset.original;delete $("pSave").dataset.edit;$("pSave").textContent="Сохранить фото";
 });
-$("pFile").addEventListener("change",e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{$("pImage").value="";$("pImage").dataset.b64=r.result;};r.readAsDataURL(f);});
+$("pFile").addEventListener("change",e=>{
+  const f=e.target.files[0];if(!f)return;
+  if(!f.type.startsWith("image/")){alert("Выбери файл изображения");e.target.value="";return;}
+  const reader=new FileReader();
+  reader.onload=()=>{
+    const img=new Image();
+    img.onload=()=>{
+      const maxSide=1800,scale=Math.min(1,maxSide/Math.max(img.width,img.height));
+      const canvas=document.createElement("canvas");
+      canvas.width=Math.max(1,Math.round(img.width*scale));
+      canvas.height=Math.max(1,Math.round(img.height*scale));
+      const ctx=canvas.getContext("2d");
+      ctx.drawImage(img,0,0,canvas.width,canvas.height);
+      $("pImage").value="";
+      $("pImage").dataset.b64=canvas.toDataURL("image/jpeg",0.82);
+    };
+    img.onerror=()=>alert("Не удалось прочитать изображение");
+    img.src=reader.result;
+  };
+  reader.onerror=()=>alert("Не удалось загрузить файл");
+  reader.readAsDataURL(f);
+});
 $("pSave").addEventListener("click",async()=>{
   const id=$("pId").value.trim()||nextPhotoId(),title=$("pTitle").value.trim(),description=$("pDesc").value.trim(),date=$("pDate").value;
-  const category=$("pCat").value.trim(),tags=$("pTags").value.split(",").map(t=>t.trim()).filter(Boolean),image=$("pImage").value.trim()||$("pImage").dataset.b64||"";
+  const category=$("pCat").value.trim(),tags=$("pTags").value.split(",").map(t=>t.trim()).filter(Boolean),editing=$("pSave").dataset.edit!==undefined,image=$("pImage").value.trim()||$("pImage").dataset.b64||(editing?$("pImage").dataset.original:"")||"";
   if(!title){alert("Укажи название");return;}if(!date){alert("Укажи дату");return;}
   const obj={id,title,description,date,category,tags,image};
-  const editing=$("pSave").dataset.edit!==undefined;
   if(!editing&&PHOTOS.some(p=>String(p.id)===id)){alert("ID уже занят, смени или оставь пустым");return;}
   try{
     await sbRequest("photos",editing?`id=eq.${encodeURIComponent(id)}`:"on_conflict=id",{method:editing?"PATCH":"POST",headers:editing?{}:{"Prefer":"resolution=merge-duplicates,return=representation"},body:JSON.stringify(obj)});
