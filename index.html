@@ -371,7 +371,7 @@ document.addEventListener("pointerdown",e => {if(dr.classList.contains("open")&&
 setInterval(() => {if(Mu.on&&dr.classList.contains("open")){const v = Mu.bars();dr.querySelectorAll(".eq b").forEach((b,i) => b.style.transform = `scaleY(${Math.max(.1,v[i])})`);}},70);
 
 // ---- рендер ----
-const card = p => `<article class="photo rv" tabindex="0" role="button" aria-label="${esc(p.title)}" data-id="${esc(p.id)}"><div class="ph">${p.image?`<img src="${esc(p.image)}" alt="${esc(p.title)}" loading="lazy" decoding="async" onerror="this.remove()">`:""}</div><div class="cap"><small>№ ${esc(p.id)}</small><h3>${esc(p.title)}</h3></div><p>${esc(p.description)}</p><div class="tagline">${esc(fmt(p.date))}${p.category?" · "+esc(p.category):""}</div></article>`;
+const card = p => `<article class="photo rv" tabindex="0" role="button" aria-label="${esc(p.title)}" data-id="${esc(p.id)}" onclick="openPhoto(this.dataset.id)"><div class="ph">${p.image?`<img src="${esc(p.image)}" alt="${esc(p.title)}" loading="lazy" decoding="async" onerror="this.remove()">`:""}</div><div class="cap"><small>№ ${esc(p.id)}</small><h3>${esc(p.title)}</h3></div><p>${esc(p.description)}</p><div class="tagline">${esc(fmt(p.date))}${p.category?" · "+esc(p.category):""}</div></article>`;
 const empty = m => `<p class="empty">${m}</p>`;
 function filter(q,cat=""){q = q.toLowerCase().trim();return sorted().filter(p => (!cat||p.category===cat)&&(!q||[p.title,p.description,p.category,...(p.tags||[])].join(" ").toLowerCase().includes(q)));}
 function lists(){
@@ -538,7 +538,6 @@ $("cmtSend").addEventListener("click", async ()=>{
 });
 
 
-document.addEventListener("click",e => {const c = e.target.closest(".photo");if(c)openPhoto(c.dataset.id);});
 addEventListener("keydown",e => {
  const m = $("photoModal"), c = e.target.closest&&e.target.closest(".photo");
  if(c&&(e.key==="Enter"||e.key===" ")){e.preventDefault();openPhoto(c.dataset.id);return;}
